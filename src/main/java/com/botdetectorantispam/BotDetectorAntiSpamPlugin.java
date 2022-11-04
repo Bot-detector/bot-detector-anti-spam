@@ -1,4 +1,4 @@
-package com.example;
+package com.botdetectorantispam;
 
 import com.google.inject.Provides;
 import javax.inject.Inject;
@@ -14,40 +14,31 @@ import net.runelite.client.plugins.PluginDescriptor;
 
 @Slf4j
 @PluginDescriptor(
-	name = "Example"
+	name = "Bot Detector Anti-spam"
 )
-public class ExamplePlugin extends Plugin
+public class BotDetectorAntiSpamPlugin extends Plugin
 {
 	@Inject
 	private Client client;
 
 	@Inject
-	private ExampleConfig config;
+	private BotDetectorAntiSpamConfig config;
 
 	@Override
 	protected void startUp() throws Exception
 	{
-		log.info("Example started!");
+		log.info("bot-detector-anti-spam started!");
 	}
 
 	@Override
 	protected void shutDown() throws Exception
 	{
-		log.info("Example stopped!");
-	}
-
-	@Subscribe
-	public void onGameStateChanged(GameStateChanged gameStateChanged)
-	{
-		if (gameStateChanged.getGameState() == GameState.LOGGED_IN)
-		{
-			client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", "Example says " + config.greeting(), null);
-		}
+		log.info("bot-detector-anti-spam stopped!");
 	}
 
 	@Provides
-	ExampleConfig provideConfig(ConfigManager configManager)
+	BotDetectorAntiSpamConfig provideConfig(ConfigManager configManager)
 	{
-		return configManager.getConfig(ExampleConfig.class);
+		return configManager.getConfig(BotDetectorAntiSpamConfig.class);
 	}
 }

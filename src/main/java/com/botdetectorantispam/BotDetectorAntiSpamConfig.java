@@ -1,12 +1,13 @@
-package com.example;
+package com.botdetectorantispam;
 
 import net.runelite.client.config.Config;
 import net.runelite.client.config.ConfigGroup;
 import net.runelite.client.config.ConfigItem;
 
-@ConfigGroup("example")
-public interface ExampleConfig extends Config
+@ConfigGroup("botdetectorantispam")
+public interface BotDetectorAntiSpamConfig extends Config
 {
+	//TODO: Cyborger plez fix
 	@ConfigItem(
 		keyName = "greeting",
 		name = "Welcome Greeting",
