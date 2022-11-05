@@ -23,6 +23,9 @@ public class NaiveBayes {
     }
 
     public void markMessage(String message, Type dataType){
+        // TODO: log.info()
+        System.out.println(message + " marked as " + dataType);
+
         String[] _tokens = messageToTokens(message);
 
         for (String token: _tokens){
@@ -33,17 +36,27 @@ public class NaiveBayes {
     }
 
     public float predict(String message){
+        // convert message into array of words
         String[] _tokens = messageToTokens(message);
 
+        int lenTokens = 0;
         int total = allMessages.total();
         // pham = probability ham, pspam = probability spam
         float pHam = (float) allMessages.ham / (float) total;
         float pSpam = (float) allMessages.spam / (float) total;
 
         for(String token: _tokens){
+            // get token from corpus
             Token _token = tokens.getOrDefault(token, new Token());
+            lenTokens += _token.total();
+            // calculate probabilities
             pHam *= (float) _token.ham / (float) allMessages.ham;
             pSpam *= (float) _token.spam / (float) allMessages.spam;
+        }
+        // give default prediction if insufficient data
+        if (lenTokens * 2 < _tokens.length){
+            // TODO: return null?
+            return (float) 0.5;
         }
         return pHam / (pSpam + pHam);
     }
