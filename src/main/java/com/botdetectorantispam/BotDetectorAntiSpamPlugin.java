@@ -2,30 +2,33 @@ package com.botdetectorantispam;
 
 import com.botdetectorantispam.enums.Type;
 import com.botdetectorantispam.model.NaiveBayes;
-import com.botdetectorantispam.model.Token;
+
 import com.google.inject.Provides;
 import javax.inject.Inject;
-import javax.swing.plaf.synth.SynthToolTipUI;
+
 
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.*;
 import net.runelite.api.events.ChatMessage;
-import net.runelite.api.events.GameStateChanged;
+
 import net.runelite.api.events.MenuOpened;
 import net.runelite.api.events.OverheadTextChanged;
 import net.runelite.api.widgets.Widget;
 import net.runelite.api.widgets.WidgetInfo;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
-import net.runelite.client.menus.MenuManager;
-import net.runelite.client.menus.WidgetMenuOption;
+
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.util.ColorUtil;
 import net.runelite.client.util.Text;
 
+
 import java.awt.*;
-import java.util.Map;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+
 
 @Slf4j
 @PluginDescriptor(
@@ -43,17 +46,22 @@ public class BotDetectorAntiSpamPlugin extends Plugin
 	// custom injections
 	@Inject
 	private NaiveBayes naiveBayes;
-	@Inject
-	private MenuManager menuManager;
 
 	// custom variables
 	private static final String MARK_HAM_OPTION = "mark ham";
 	private static final String MARK_SPAM_OPTION = "mark spam";
 
+	// TODO: load from file
+	private List<String> blackList = new ArrayList<String>();
+	private List<String> ignoreList = new ArrayList<String>();
+	private List<String> whiteList = new ArrayList<String>();
+	private List<String> excludeList = new ArrayList<String>(Arrays.asList(" ", ",", "."));
+
 	@Override
 	protected void startUp() throws Exception
 	{
 		// TODO: naiveBayes.load();
+		naiveBayes.excludeList = excludeList;
 		log.info("bot-detector-anti-spam started!");
 	}
 
@@ -108,8 +116,19 @@ public class BotDetectorAntiSpamPlugin extends Plugin
 								Type.valueOf(entry.replace("mark ","").toUpperCase())
 						);
 						// TODO: this doesnt work
-						naiveBayes.tokens.forEach((key, value) -> System.out.println(key + ":" + value));
+						System.out.println(naiveBayes.toString());
+						// naiveBayes.tokens.forEach((key, value) -> System.out.println(key + ":" + value));
 						// TODO: if marked spam than add user to ignore list
+						switch (entry){
+							case MARK_SPAM_OPTION:
+								blackList.add(selectedChat);
+								// TODO: add author of the message to ignore list if
+								break;
+							case  MARK_HAM_OPTION:
+								whiteList.add(selectedChat);
+								break;
+						}
+
 					});
 		}
 	}
@@ -125,7 +144,17 @@ public class BotDetectorAntiSpamPlugin extends Plugin
 		if (msgNode.getType() != ChatMessageType.PUBLICCHAT) {
 			return;
 		}
+		// check blacklist
 
+		if( blackList.contains(message)){
+			System.out.println("[IGNORED] " + message);
+			naiveBayes.markMessage(message, Type.SPAM);
+			return;
+		}
+		if (whiteList.contains(message)){
+			System.out.println("[WHITELIST] " + message);
+			naiveBayes.markMessage(message, Type.HAM);
+		}
 		// get prediction
 		float prediction = naiveBayes.predict(message);
 
@@ -135,10 +164,6 @@ public class BotDetectorAntiSpamPlugin extends Plugin
 		// rewrite message
 		message = message + " " +"[" + strPrediction + "]";
 
-		// print message
-		// TODO: remove
-		System.out.println(message);
-
 		// display prediction to user
 		msgNode.setValue(message);
 
@@ -147,6 +172,7 @@ public class BotDetectorAntiSpamPlugin extends Plugin
 
 		if (prediction > threshold){
 			// TODO: add user to ignore list
+			// TODO: add hash of msg to list of known bad msg
 		}
 
 	}
