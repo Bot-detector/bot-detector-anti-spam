@@ -25,6 +25,7 @@ import net.runelite.client.plugins.PluginDescriptor;
 import static net.runelite.api.widgets.WidgetInfo.TO_CHILD;
 import static net.runelite.api.widgets.WidgetInfo.TO_GROUP;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -65,6 +66,7 @@ public class BotDetectorAntiSpamPlugin extends Plugin
 	protected void startUp() throws Exception
 	{
 		// TODO: naiveBayes.load();
+		dataPersister.setup();
 		naiveBayes.tokens = dataPersister.readTokens();
 		naiveBayes.excludeList = excludeList;
 		log.info("bot-detector-anti-spam started!");
@@ -137,9 +139,12 @@ public class BotDetectorAntiSpamPlugin extends Plugin
 			return;
 		}
 
+		// get current message, remove the data between <>
 		String currentMessage = messageContents
 				.getText()
 				.replaceAll("<.*?>", "");
+
+		// get the sender, remove the data(timestamp) between [] and the : after the name
 		String senderName = sender
 				.getText()
 				.replaceAll("\\[.*?\\]\\s", "")
@@ -159,16 +164,20 @@ public class BotDetectorAntiSpamPlugin extends Plugin
 								Type.valueOf(option.replace("mark ","").toUpperCase())
 						);
 
+						try {
+							dataPersister.writeTokens(naiveBayes.tokens);
+						} catch (IOException exception){
+							exception.printStackTrace();
+						}
 
-						System.out.println(naiveBayes.toString());
-						// naiveBayes.tokens.forEach((key, value) -> System.out.println(key + ":" + value));
-						// TODO: if marked spam than add user to ignore list
+
 						switch (option){
 							case MARK_SPAM_OPTION:
+								// add the message to the blacklist
 								blackList.add(currentMessage);
+								// if the sender is not on the ignore list add him to the ignorelist
 								if (!ignoreList.contains(senderName)){
 									ignoreList.add(senderName);
-									System.out.println(ignoreList);
 								}
 								break;
 							case  MARK_HAM_OPTION:
@@ -186,6 +195,7 @@ public class BotDetectorAntiSpamPlugin extends Plugin
 		String senderName = msgNode.getName();
 		String message = msgNode.getValue();
 
+		// we need to remove a msg from the ChatLineBuffer
 		final ChatLineBuffer lineBuffer = client.getChatLineMap().get(msgNode.getType().getType());
 
 		// TODO: configurable: ignore friends & clan members
@@ -193,11 +203,15 @@ public class BotDetectorAntiSpamPlugin extends Plugin
 			return;
 		}
 
+		// TODO: replace println with log
+
+		// check ignore list
 		if (ignoreList.contains(senderName)){
 			System.out.println("[IGNORED] " + "player:" + senderName);
 			lineBuffer.removeMessageNode(msgNode);
 			return;
 		}
+
 		// check blacklist
 		if( blackList.contains(message)){
 			System.out.println("[IGNORED] " + message);
