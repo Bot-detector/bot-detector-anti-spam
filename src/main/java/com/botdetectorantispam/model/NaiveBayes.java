@@ -1,16 +1,14 @@
 package com.botdetectorantispam.model;
-
 import  com.botdetectorantispam.enums.Type;
-
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+
 public class NaiveBayes {
     public Map<String,Token> tokens = new HashMap<>();
     public Token allMessages = new Token();
-
     public List<String> excludeList = new ArrayList<>();
 
     private String[] messageToTokens(String message){

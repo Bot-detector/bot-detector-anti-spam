@@ -2,6 +2,7 @@ package com.botdetectorantispam;
 
 import com.botdetectorantispam.enums.Type;
 import com.botdetectorantispam.model.NaiveBayes;
+import com.botdetectorantispam.model.DataPersister;
 
 import com.google.inject.Provides;
 import javax.inject.Inject;
@@ -27,6 +28,7 @@ import static net.runelite.api.widgets.WidgetInfo.TO_GROUP;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 
 
 @Slf4j
@@ -46,6 +48,9 @@ public class BotDetectorAntiSpamPlugin extends Plugin
 	@Inject
 	private NaiveBayes naiveBayes;
 
+	@Inject
+	private  DataPersister dataPersister;
+
 	// custom variables
 	private static final String MARK_HAM_OPTION = "mark ham";
 	private static final String MARK_SPAM_OPTION = "mark spam";
@@ -60,6 +65,7 @@ public class BotDetectorAntiSpamPlugin extends Plugin
 	protected void startUp() throws Exception
 	{
 		// TODO: naiveBayes.load();
+		naiveBayes.tokens = dataPersister.readTokens();
 		naiveBayes.excludeList = excludeList;
 		log.info("bot-detector-anti-spam started!");
 	}
@@ -175,14 +181,13 @@ public class BotDetectorAntiSpamPlugin extends Plugin
 
 	@Subscribe
 	public void onChatMessage(ChatMessage chatMessage){
-
-		final ChatLineBuffer lineBuffer = client.getChatLineMap().get(chatMessage.getType());
 		// get message node from message event
 		MessageNode msgNode = chatMessage.getMessageNode();
 		String senderName = msgNode.getName();
 		String message = msgNode.getValue();
 
-		System.out.println(senderName);
+		final ChatLineBuffer lineBuffer = client.getChatLineMap().get(msgNode.getType().getType());
+
 		// TODO: configurable: ignore friends & clan members
 		if (msgNode.getType() != ChatMessageType.PUBLICCHAT) {
 			return;
