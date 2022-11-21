@@ -20,11 +20,10 @@ import net.runelite.client.eventbus.Subscribe;
 
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
-import net.runelite.client.util.ColorUtil;
-import net.runelite.client.util.Text;
 
+import static net.runelite.api.widgets.WidgetInfo.TO_CHILD;
+import static net.runelite.api.widgets.WidgetInfo.TO_GROUP;
 
-import java.awt.*;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -77,84 +76,137 @@ public class BotDetectorAntiSpamPlugin extends Plugin
 
 	@Subscribe
 	public void onMenuOpened(MenuOpened event) {
-		// check if the user clicked on chat
-		MenuEntry menuEntry = event.getFirstEntry();
-		Widget widget = menuEntry.getWidget();
-
-		// check if the user clicked chat?
-		if (widget.getParentId() != WidgetInfo.CHATBOX_MESSAGE_LINES.getId()) {
+		// copied from https://github.com/runelite/runelite/blob/master/runelite-client/src/main/java/net/runelite/client/plugins/chathistory/ChatHistoryPlugin.java#L184
+		// TODO: check config for
+		if (event.getMenuEntries().length < 2)
+		{
 			return;
 		}
-		// TODO: get message from widget?
-		// copied from: https://github.com/jackriccomini/spamfilter-plugin-runelite/
-		// As far as I can tell by skimming the builtin chat history and hiscores plugins:
-		// Click doesn't happen on a chat message, it happens on the *sender* of the chat message.
-		// There is a static list of senders. First static child is the most recent sender,
-		// Second static child is second most recent sender, and so on.
-		// Chat messages are dynamic children of CHATBOX_MESSAGES_LINES.
-		int firstChatSender = WidgetInfo.CHATBOX_FIRST_MESSAGE.getChildId();
-		int clickedChatSender = WidgetInfo.TO_CHILD(widget.getId());
-		int clickOffset = clickedChatSender - firstChatSender;
-		// can calculate the offset between "clicked-on chat message" and "most recent chat message"
-		// by looking at the offset between "clicked-on chat sender" and "most recent chat sender"
-		int selectedChatOffset = (clickOffset * 4) + 1;
 
-		Widget selectedChatWidget = widget.getParent().getChild(selectedChatOffset);
-		if (selectedChatWidget == null) {
+		// Use second entry as first one can be walk here with transparent chatbox
+		final MenuEntry entry = event.getMenuEntries()[event.getMenuEntries().length - 2];
+
+		if (entry.getType() != MenuAction.CC_OP_LOW_PRIORITY && entry.getType() != MenuAction.RUNELITE)
+		{
 			return;
 		}
-		String selectedChat = Text.removeTags(selectedChatWidget.getText());
 
-		for (String entry : new String[]{MARK_HAM_OPTION, MARK_SPAM_OPTION}){
+		final int groupId = TO_GROUP(entry.getParam1());
+		final int childId = TO_CHILD(entry.getParam1());
+
+		if (groupId != WidgetInfo.CHATBOX.getGroupId())
+		{
+			return;
+		}
+
+		final Widget widget = client.getWidget(groupId, childId);
+		final Widget parent = widget.getParent();
+
+		if (WidgetInfo.CHATBOX_MESSAGE_LINES.getId() != parent.getId())
+		{
+			return;
+		}
+
+		// Get child id of first chat message static child so we can substract this offset to link to dynamic child
+		// later
+		final int first = WidgetInfo.CHATBOX_FIRST_MESSAGE.getChildId();
+
+		// Convert current message static widget id to dynamic widget id of message node with message contents
+		// When message is right clicked, we are actually right clicking static widget that contains only sender.
+		// The actual message contents are stored in dynamic widgets that follow same order as static widgets.
+		// Every first dynamic widget is message sender, every second one is message contents,
+		// every third one is clan name and every fourth one is clan rank icon.
+		// The last two are hidden when the message is not from a clan chat or guest clan chat.
+		final int dynamicChildId = (childId - first) * 4 + 1;
+		final int senderId = dynamicChildId - 1;
+
+
+		// Extract and store message contents when menu is opened because dynamic children can change while right click
+		// menu is open and dynamicChildId will be outdated
+		final Widget messageContents = parent.getChild(dynamicChildId);
+		final Widget sender = parent.getChild(senderId);
+
+		if (messageContents == null)
+		{
+			return;
+		}
+
+		String currentMessage = messageContents
+				.getText()
+				.replaceAll("<.*?>", "");
+		String senderName = sender
+				.getText()
+				.replaceAll("\\[.*?\\]\\s", "")
+				.replace(":","");
+
+		System.out.println(senderName);
+
+		for (String option : new String[]{MARK_HAM_OPTION, MARK_SPAM_OPTION}){
 			client.createMenuEntry(1)
-					.setOption(entry)
+					.setOption(option)
+					.setTarget(entry.getTarget())
 					.setType(MenuAction.RUNELITE)
-					.setTarget(ColorUtil.wrapWithColorTag("message", Color.WHITE))
-					.onClick(e -> {
+					.onClick(e ->
+					{
 						naiveBayes.markMessage(
-								selectedChat,
-								Type.valueOf(entry.replace("mark ","").toUpperCase())
+								currentMessage,
+								Type.valueOf(option.replace("mark ","").toUpperCase())
 						);
-						// TODO: this doesnt work
+
+
 						System.out.println(naiveBayes.toString());
 						// naiveBayes.tokens.forEach((key, value) -> System.out.println(key + ":" + value));
 						// TODO: if marked spam than add user to ignore list
-						switch (entry){
+						switch (option){
 							case MARK_SPAM_OPTION:
-								blackList.add(selectedChat);
-								// TODO: add author of the message to ignore list if
+								blackList.add(currentMessage);
+								if (!ignoreList.contains(senderName)){
+									ignoreList.add(senderName);
+									System.out.println(ignoreList);
+								}
 								break;
 							case  MARK_HAM_OPTION:
-								whiteList.add(selectedChat);
+								whiteList.add(currentMessage);
 								break;
 						}
-
 					});
 		}
 	}
+
 	@Subscribe
 	public void onChatMessage(ChatMessage chatMessage){
+
+		final ChatLineBuffer lineBuffer = client.getChatLineMap().get(chatMessage.getType());
 		// get message node from message event
 		MessageNode msgNode = chatMessage.getMessageNode();
-		String playerName = msgNode.getSender();
+		String senderName = msgNode.getName();
 		String message = msgNode.getValue();
 
-		// TODO: ignore friends & clan members
-		// only look at public chat
+		System.out.println(senderName);
+		// TODO: configurable: ignore friends & clan members
 		if (msgNode.getType() != ChatMessageType.PUBLICCHAT) {
 			return;
 		}
-		// check blacklist
 
+		if (ignoreList.contains(senderName)){
+			System.out.println("[IGNORED] " + "player:" + senderName);
+			lineBuffer.removeMessageNode(msgNode);
+			return;
+		}
+		// check blacklist
 		if( blackList.contains(message)){
 			System.out.println("[IGNORED] " + message);
 			naiveBayes.markMessage(message, Type.SPAM);
+			ignoreList.add(senderName);
+			lineBuffer.removeMessageNode(msgNode);
 			return;
 		}
+
 		if (whiteList.contains(message)){
 			System.out.println("[WHITELIST] " + message);
 			naiveBayes.markMessage(message, Type.HAM);
 		}
+
 		// get prediction
 		float prediction = naiveBayes.predict(message);
 
