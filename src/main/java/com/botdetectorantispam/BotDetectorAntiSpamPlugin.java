@@ -78,25 +78,10 @@ public class BotDetectorAntiSpamPlugin extends Plugin
 		// TODO: naiveBayes.save();
 		log.info("bot-detector-anti-spam stopped!");
 	}
-
-	@Subscribe
-	public void onMenuOpened(MenuOpened event) {
-		/*
-		* add two buttons, where the user cna mark spam or ham.
-		* */
-		// copied from https://github.com/runelite/runelite/blob/master/runelite-client/src/main/java/net/runelite/client/plugins/chathistory/ChatHistoryPlugin.java#L184
-		// TODO: check config for
-		if (event.getMenuEntries().length < 2)
-		{
-			return;
-		}
-
-		// Use second entry as first one can be walk here with transparent chatbox
-		final MenuEntry entry = event.getMenuEntries()[event.getMenuEntries().length - 2];
-
+	private String[] getChatBoxMessage(MenuEntry entry){
 		if (entry.getType() != MenuAction.CC_OP_LOW_PRIORITY && entry.getType() != MenuAction.RUNELITE)
 		{
-			return;
+			return null;
 		}
 
 		final int groupId = TO_GROUP(entry.getParam1());
@@ -104,7 +89,7 @@ public class BotDetectorAntiSpamPlugin extends Plugin
 
 		if (groupId != WidgetInfo.CHATBOX.getGroupId())
 		{
-			return;
+			return null;
 		}
 
 		final Widget widget = client.getWidget(groupId, childId);
@@ -112,7 +97,7 @@ public class BotDetectorAntiSpamPlugin extends Plugin
 
 		if (WidgetInfo.CHATBOX_MESSAGE_LINES.getId() != parent.getId())
 		{
-			return;
+			return null;
 		}
 
 		// Get child id of first chat message static child so we can substract this offset to link to dynamic child
@@ -136,7 +121,7 @@ public class BotDetectorAntiSpamPlugin extends Plugin
 
 		if (messageContents == null)
 		{
-			return;
+			return null;
 		}
 
 		// get current message, remove the data between <>
@@ -149,8 +134,34 @@ public class BotDetectorAntiSpamPlugin extends Plugin
 				.getText()
 				.replaceAll("\\[.*?\\]\\s", "")
 				.replace(":","");
+		return new String[] {senderName, currentMessage};
+	}
 
-		System.out.println(senderName);
+	@Subscribe
+	public void onMenuOpened(MenuOpened event) {
+		/*
+		* add two buttons, where the user cna mark spam or ham.
+		* */
+		// copied from https://github.com/runelite/runelite/blob/master/runelite-client/src/main/java/net/runelite/client/plugins/chathistory/ChatHistoryPlugin.java#L184
+		// TODO: check config for
+		if (event.getMenuEntries().length < 2)
+		{
+			return;
+		}
+
+		// Use second entry as first one can be walk here with transparent chatbox
+		final MenuEntry entry = event.getMenuEntries()[event.getMenuEntries().length - 2];
+
+		String[] chatMessage = getChatBoxMessage(entry);
+
+		if (chatMessage == null){
+			return;
+		}
+
+		String senderName = chatMessage[0];
+		String currentMessage = chatMessage[1];
+
+		System.out.println(senderName+":"+currentMessage);
 
 		for (String option : new String[]{MARK_HAM_OPTION, MARK_SPAM_OPTION}){
 			client.createMenuEntry(1)
@@ -163,13 +174,12 @@ public class BotDetectorAntiSpamPlugin extends Plugin
 								currentMessage,
 								Type.valueOf(option.replace("mark ","").toUpperCase())
 						);
-
+						// TODO: find a better place to execute this, maybe on a clock?
 						try {
 							dataPersister.writeTokens(naiveBayes.tokens);
 						} catch (IOException exception){
 							exception.printStackTrace();
 						}
-
 
 						switch (option){
 							case MARK_SPAM_OPTION:
