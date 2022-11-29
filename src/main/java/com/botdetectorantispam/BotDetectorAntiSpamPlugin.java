@@ -79,11 +79,11 @@ public class BotDetectorAntiSpamPlugin extends Plugin
 		log.info("bot-detector-anti-spam stopped!");
 	}
 
-	// TODO: (on menu option click) mark ham naiveBayes.markMessage(message, Type.HAM);
-	// TODO: (on menu option click) mark spam naiveBayes.markMessage(message, Type.SPAM);
-
 	@Subscribe
 	public void onMenuOpened(MenuOpened event) {
+		/*
+		* add two buttons, where the user cna mark spam or ham.
+		* */
 		// copied from https://github.com/runelite/runelite/blob/master/runelite-client/src/main/java/net/runelite/client/plugins/chathistory/ChatHistoryPlugin.java#L184
 		// TODO: check config for
 		if (event.getMenuEntries().length < 2)
@@ -190,6 +190,13 @@ public class BotDetectorAntiSpamPlugin extends Plugin
 
 	@Subscribe
 	public void onChatMessage(ChatMessage chatMessage){
+		/*
+		* Hide message if
+		*  - sender is on ignore list
+		*  - prediction is spam
+		*  - message is already marked spam
+		* */
+
 		// get message node from message event
 		MessageNode msgNode = chatMessage.getMessageNode();
 		String senderName = msgNode.getName();
@@ -250,6 +257,8 @@ public class BotDetectorAntiSpamPlugin extends Plugin
 	
 	@Subscribe
 	public void onOverheadTextChanged(OverheadTextChanged event) {
+		/*
+		* */
 		// TODO: ignore friends & clan members
 		/*
 		if (!(event.getActor() instanceof Player)) {
