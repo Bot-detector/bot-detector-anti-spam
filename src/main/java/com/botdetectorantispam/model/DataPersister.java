@@ -10,7 +10,7 @@ import java.util.Map;
 import com.google.gson.reflect.TypeToken;
 
 public class DataPersister {
-    private static Gson gson;
+    private static Gson gson = new Gson();
     public static final File PARENT_DIRECTORY = new File(RuneLite.RUNELITE_DIR, "botdetectorantispam");
 
     public static void setup() throws IOException{
