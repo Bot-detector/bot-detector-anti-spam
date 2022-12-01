@@ -1,9 +1,13 @@
 package com.botdetectorantispam;
 
+import com.botdetectorantispam.enums.PlayerState;
+import com.botdetectorantispam.enums.MessageState;
 import com.botdetectorantispam.enums.Type;
+import com.botdetectorantispam.model.Player;
 import com.botdetectorantispam.model.NaiveBayes;
 import com.botdetectorantispam.model.DataPersister;
 
+import com.botdetectorantispam.model.Token;
 import com.google.inject.Provides;
 import javax.inject.Inject;
 
@@ -26,10 +30,7 @@ import static net.runelite.api.widgets.WidgetInfo.TO_CHILD;
 import static net.runelite.api.widgets.WidgetInfo.TO_GROUP;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 
 @Slf4j
@@ -57,6 +58,8 @@ public class BotDetectorAntiSpamPlugin extends Plugin
 	private static final String MARK_SPAM_OPTION = "mark spam";
 
 	// TODO: load from file
+	public Map<String, Player> playerList = new HashMap<>();
+
 	private List<String> blackList = new ArrayList<String>();
 	private List<String> ignoreList = new ArrayList<String>();
 	private List<String> whiteList = new ArrayList<String>();
@@ -69,6 +72,7 @@ public class BotDetectorAntiSpamPlugin extends Plugin
 		dataPersister.setup();
 		naiveBayes.tokens = dataPersister.readTokens();
 		naiveBayes.excludeList = excludeList;
+		playerList = dataPersister.readPlayers();
 		log.info("bot-detector-anti-spam started!");
 	}
 
@@ -76,6 +80,13 @@ public class BotDetectorAntiSpamPlugin extends Plugin
 	protected void shutDown() throws Exception
 	{
 		// TODO: naiveBayes.save();
+		// TODO: find a better place to execute this, maybe on a clock?
+		try {
+			dataPersister.writeTokens(naiveBayes.tokens);
+			dataPersister.writePlayers(playerList);
+		} catch (IOException exception){
+			exception.printStackTrace();
+		}
 		log.info("bot-detector-anti-spam stopped!");
 	}
 	private String[] getChatBoxMessage(MenuEntry entry){
@@ -161,6 +172,8 @@ public class BotDetectorAntiSpamPlugin extends Plugin
 		String senderName = chatMessage[0];
 		String currentMessage = chatMessage[1];
 
+		Player player = playerList.getOrDefault(senderName, new Player(senderName));
+
 		System.out.println(senderName+":"+currentMessage);
 
 		for (String option : new String[]{MARK_HAM_OPTION, MARK_SPAM_OPTION}){
@@ -174,27 +187,28 @@ public class BotDetectorAntiSpamPlugin extends Plugin
 								currentMessage,
 								Type.valueOf(option.replace("mark ","").toUpperCase())
 						);
-						// TODO: find a better place to execute this, maybe on a clock?
-						try {
-							dataPersister.writeTokens(naiveBayes.tokens);
-						} catch (IOException exception){
-							exception.printStackTrace();
-						}
 
 						switch (option){
 							case MARK_SPAM_OPTION:
 								// add the message to the blacklist
 								blackList.add(currentMessage);
-								// if the sender is not on the ignore list add him to the ignorelist
-								if (!ignoreList.contains(senderName)){
-									ignoreList.add(senderName);
-								}
+								player.setStateChange(PlayerState.IGNORED);
 								break;
 							case  MARK_HAM_OPTION:
 								whiteList.add(currentMessage);
+								player.setStateChange(PlayerState.ALLOWED);
 								break;
 						}
 					});
+		}
+		// update playerList
+		playerList.put(senderName, player);
+
+		try {
+			dataPersister.writeTokens(naiveBayes.tokens);
+			dataPersister.writePlayers(playerList);
+		} catch (IOException exception){
+			exception.printStackTrace();
 		}
 	}
 
@@ -212,6 +226,9 @@ public class BotDetectorAntiSpamPlugin extends Plugin
 		String senderName = msgNode.getName();
 		String message = msgNode.getValue();
 
+		Player player = playerList.getOrDefault(senderName, new Player(senderName));
+		playerList.put(senderName, player);
+
 		// we need to remove a msg from the ChatLineBuffer
 		final ChatLineBuffer lineBuffer = client.getChatLineMap().get(msgNode.getType().getType());
 
@@ -221,13 +238,12 @@ public class BotDetectorAntiSpamPlugin extends Plugin
 		}
 
 		// TODO: replace println with log
-
-		// check ignore list
-		if (ignoreList.contains(senderName)){
+		if (player.getPlayerState() == PlayerState.IGNORED){
 			System.out.println("[IGNORED] " + "player:" + senderName);
 			lineBuffer.removeMessageNode(msgNode);
 			return;
 		}
+
 
 		// check blacklist
 		if( blackList.contains(message)){
