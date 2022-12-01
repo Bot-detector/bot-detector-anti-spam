@@ -25,6 +25,7 @@ import net.runelite.client.plugins.PluginDescriptor;
 import static net.runelite.api.widgets.WidgetInfo.TO_CHILD;
 import static net.runelite.api.widgets.WidgetInfo.TO_GROUP;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -65,6 +66,7 @@ public class BotDetectorAntiSpamPlugin extends Plugin
 	protected void startUp() throws Exception
 	{
 		// TODO: naiveBayes.load();
+		dataPersister.setup();
 		naiveBayes.tokens = dataPersister.readTokens();
 		naiveBayes.excludeList = excludeList;
 		log.info("bot-detector-anti-spam started!");
@@ -76,25 +78,10 @@ public class BotDetectorAntiSpamPlugin extends Plugin
 		// TODO: naiveBayes.save();
 		log.info("bot-detector-anti-spam stopped!");
 	}
-
-	// TODO: (on menu option click) mark ham naiveBayes.markMessage(message, Type.HAM);
-	// TODO: (on menu option click) mark spam naiveBayes.markMessage(message, Type.SPAM);
-
-	@Subscribe
-	public void onMenuOpened(MenuOpened event) {
-		// copied from https://github.com/runelite/runelite/blob/master/runelite-client/src/main/java/net/runelite/client/plugins/chathistory/ChatHistoryPlugin.java#L184
-		// TODO: check config for
-		if (event.getMenuEntries().length < 2)
-		{
-			return;
-		}
-
-		// Use second entry as first one can be walk here with transparent chatbox
-		final MenuEntry entry = event.getMenuEntries()[event.getMenuEntries().length - 2];
-
+	private String[] getChatBoxMessage(MenuEntry entry){
 		if (entry.getType() != MenuAction.CC_OP_LOW_PRIORITY && entry.getType() != MenuAction.RUNELITE)
 		{
-			return;
+			return null;
 		}
 
 		final int groupId = TO_GROUP(entry.getParam1());
@@ -102,7 +89,7 @@ public class BotDetectorAntiSpamPlugin extends Plugin
 
 		if (groupId != WidgetInfo.CHATBOX.getGroupId())
 		{
-			return;
+			return null;
 		}
 
 		final Widget widget = client.getWidget(groupId, childId);
@@ -110,7 +97,7 @@ public class BotDetectorAntiSpamPlugin extends Plugin
 
 		if (WidgetInfo.CHATBOX_MESSAGE_LINES.getId() != parent.getId())
 		{
-			return;
+			return null;
 		}
 
 		// Get child id of first chat message static child so we can substract this offset to link to dynamic child
@@ -134,18 +121,47 @@ public class BotDetectorAntiSpamPlugin extends Plugin
 
 		if (messageContents == null)
 		{
-			return;
+			return null;
 		}
 
+		// get current message, remove the data between <>
 		String currentMessage = messageContents
 				.getText()
 				.replaceAll("<.*?>", "");
+
+		// get the sender, remove the data(timestamp) between [] and the : after the name
 		String senderName = sender
 				.getText()
 				.replaceAll("\\[.*?\\]\\s", "")
 				.replace(":","");
+		return new String[] {senderName, currentMessage};
+	}
 
-		System.out.println(senderName);
+	@Subscribe
+	public void onMenuOpened(MenuOpened event) {
+		/*
+		* add two buttons, where the user cna mark spam or ham.
+		* */
+		// copied from https://github.com/runelite/runelite/blob/master/runelite-client/src/main/java/net/runelite/client/plugins/chathistory/ChatHistoryPlugin.java#L184
+		// TODO: check config for
+		if (event.getMenuEntries().length < 2)
+		{
+			return;
+		}
+
+		// Use second entry as first one can be walk here with transparent chatbox
+		final MenuEntry entry = event.getMenuEntries()[event.getMenuEntries().length - 2];
+
+		String[] chatMessage = getChatBoxMessage(entry);
+
+		if (chatMessage == null){
+			return;
+		}
+
+		String senderName = chatMessage[0];
+		String currentMessage = chatMessage[1];
+
+		System.out.println(senderName+":"+currentMessage);
 
 		for (String option : new String[]{MARK_HAM_OPTION, MARK_SPAM_OPTION}){
 			client.createMenuEntry(1)
@@ -158,17 +174,20 @@ public class BotDetectorAntiSpamPlugin extends Plugin
 								currentMessage,
 								Type.valueOf(option.replace("mark ","").toUpperCase())
 						);
+						// TODO: find a better place to execute this, maybe on a clock?
+						try {
+							dataPersister.writeTokens(naiveBayes.tokens);
+						} catch (IOException exception){
+							exception.printStackTrace();
+						}
 
-
-						System.out.println(naiveBayes.toString());
-						// naiveBayes.tokens.forEach((key, value) -> System.out.println(key + ":" + value));
-						// TODO: if marked spam than add user to ignore list
 						switch (option){
 							case MARK_SPAM_OPTION:
+								// add the message to the blacklist
 								blackList.add(currentMessage);
+								// if the sender is not on the ignore list add him to the ignorelist
 								if (!ignoreList.contains(senderName)){
 									ignoreList.add(senderName);
-									System.out.println(ignoreList);
 								}
 								break;
 							case  MARK_HAM_OPTION:
@@ -181,11 +200,19 @@ public class BotDetectorAntiSpamPlugin extends Plugin
 
 	@Subscribe
 	public void onChatMessage(ChatMessage chatMessage){
+		/*
+		* Hide message if
+		*  - sender is on ignore list
+		*  - prediction is spam
+		*  - message is already marked spam
+		* */
+
 		// get message node from message event
 		MessageNode msgNode = chatMessage.getMessageNode();
 		String senderName = msgNode.getName();
 		String message = msgNode.getValue();
 
+		// we need to remove a msg from the ChatLineBuffer
 		final ChatLineBuffer lineBuffer = client.getChatLineMap().get(msgNode.getType().getType());
 
 		// TODO: configurable: ignore friends & clan members
@@ -193,11 +220,15 @@ public class BotDetectorAntiSpamPlugin extends Plugin
 			return;
 		}
 
+		// TODO: replace println with log
+
+		// check ignore list
 		if (ignoreList.contains(senderName)){
 			System.out.println("[IGNORED] " + "player:" + senderName);
 			lineBuffer.removeMessageNode(msgNode);
 			return;
 		}
+
 		// check blacklist
 		if( blackList.contains(message)){
 			System.out.println("[IGNORED] " + message);
@@ -236,6 +267,8 @@ public class BotDetectorAntiSpamPlugin extends Plugin
 	
 	@Subscribe
 	public void onOverheadTextChanged(OverheadTextChanged event) {
+		/*
+		* */
 		// TODO: ignore friends & clan members
 		/*
 		if (!(event.getActor() instanceof Player)) {

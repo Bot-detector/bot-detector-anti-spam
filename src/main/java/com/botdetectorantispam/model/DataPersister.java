@@ -5,11 +5,12 @@ import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.Type;
 import java.nio.file.Files;
+import java.util.HashMap;
 import java.util.Map;
 import com.google.gson.reflect.TypeToken;
 
 public class DataPersister {
-    private static Gson gson;
+    private static Gson gson = new Gson();
     public static final File PARENT_DIRECTORY = new File(RuneLite.RUNELITE_DIR, "botdetectorantispam");
 
     public static void setup() throws IOException{
@@ -25,10 +26,20 @@ public class DataPersister {
         Files.write(dataFile.toPath(), json.getBytes());
     }
 
+    public static void writeTokens(Map<String,Token> tokens) throws IOException {
+        File dataFile = new File(PARENT_DIRECTORY, "tokens.json");
+        final String json = gson.toJson(tokens);
+        Files.write(dataFile.toPath(), json.getBytes());
+    }
     public Map<String,Token> readTokens() throws  IOException {
         File dataFile = new File(PARENT_DIRECTORY, "tokens.json");
-        String jsonData = new String(Files.readAllBytes(dataFile.toPath()));
-        Type type = new TypeToken<Map<String, Token>>(){}.getType();
-        return gson.fromJson(jsonData, type);
+        if (dataFile.exists()){
+            String jsonData = new String(Files.readAllBytes(dataFile.toPath()));
+            Type type = new TypeToken<Map<String, Token>>(){}.getType();
+            return gson.fromJson(jsonData, type);
+        } else {
+            return new HashMap<>() ;
+        }
+
     }
 }
