@@ -1,4 +1,5 @@
 package com.botdetectorantispam.model;
+import com.botdetectorantispam.enums.PlayerState;
 import com.google.gson.Gson;
 import net.runelite.client.RuneLite;
 import java.io.File;
@@ -40,6 +41,32 @@ public class DataPersister {
         } else {
             return new HashMap<>() ;
         }
+    }
+    public static void writePlayers(Map<String, Player> playerMap) throws IOException {
+        // only save ignored players
+        Map<String, Player> ignoredPlayerMap = new HashMap<>();
+        for (Map.Entry<String, Player> player: playerMap.entrySet()){
+            String key = player.getKey();
+            Player value = player.getValue();
 
+            if (value.getPlayerState() == PlayerState.IGNORED){
+                ignoredPlayerMap.put(key, value);
+            }
+        }
+
+        File dataFile = new File(PARENT_DIRECTORY, "ignoredPlayers.json");
+        final String json = gson.toJson(ignoredPlayerMap);
+        Files.write(dataFile.toPath(), json.getBytes());
+    }
+
+    public Map<String,Player> readPlayers() throws  IOException {
+        File dataFile = new File(PARENT_DIRECTORY, "ignoredPlayers.json");
+        if (dataFile.exists()){
+            String jsonData = new String(Files.readAllBytes(dataFile.toPath()));
+            Type type = new TypeToken<Map<String, Player>>(){}.getType();
+            return gson.fromJson(jsonData, type);
+        } else {
+            return new HashMap<>() ;
+        }
     }
 }
