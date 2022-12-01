@@ -19,7 +19,7 @@ public class Player {
         long now = Instant.now().getEpochSecond();
         // if state is expired
         if (now > validState){
-            System.out.println("state has expeired for" + this.playerName);
+            System.out.println("state has expired for" + this.playerName);
             this.setStateChange(PlayerState.ALLOWED);
         }
         return this.playerState;
